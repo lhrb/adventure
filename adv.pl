@@ -47,8 +47,9 @@ description("This was probably the guard room.", r1).
 description("Pillar riddle.", r2).
 description("Smt. smt to open next door", r3).
 description("Fight and loot, use a switch or smt to open door to r5", r4).
-description("You found an exit. You free now. Are you?").
+description("You found an exit. You free now. Are you?", r5).
 
+object(door, r1, east, "Symbols: A bear, a snake and an eagle.").
 
 % ---------------------------------------------------------------%
 %                          movement
@@ -116,6 +117,7 @@ take_item(State, Item, NewState) :-
     put_assoc(inventory, State, NewInventory, TmpState),
     put_assoc(items, TmpState, NewItemLocations, NewState).
 
+% TODO room/item
 drop_item(State, Item, NewState) :-
     inventory(State, Inventory),
     select(Item, Inventory, NewInventory), % handle item does not exists case
@@ -134,7 +136,7 @@ can_take(_, _) :- write("This seems wired."), nl, fail.
 list_inventory(State) :-
     write("Inventory:"),
     nl,
-    inventory(State, X),
+    inventory(State, X), % TODO improve: X was a relation but is now a list
     tab(2),
     write(X),
     nl,
@@ -212,12 +214,32 @@ r3_puzzle(_) :-
 
 
 % ---------------------------------------------------------------%
+%                        inspect
+% ---------------------------------------------------------------%
+
+% Currently not sure how to model unified access to objects.
+% There are at least three different types of objects to consider
+%   1. objects in the players inventory
+%   2. takeable items, which may change their location
+%   3. fixed items
+
+inspect(State, Object, Where) :-
+    position(State, Room),
+    object(Object, Room, Where, InvestigationResult),
+    write(InvestigationResult), nl.
+
+inspect(_,_,_) :- write("Investigation failed."), nl.
+
+
+% ---------------------------------------------------------------%
 %                        end conditions
 % ---------------------------------------------------------------%
 
 quit(State, NewState) :-
     put_assoc(end, State, quit, NewState).
 
+end_msg(quit) :- write("bye").
+end_msg(win) :- write("gz you won").
 
 % ---------------------------------------------------------------%
 %                           game loop
@@ -235,12 +257,9 @@ do(State, NewState, goto(NewPosition)) :- goto(State, NewPosition, NewState), !.
 do(State, NewState, quit) :- quit(State, NewState), !.
 do(State, NewState, take(Item)) :- take(State, Item, NewState), !.
 do(State, State, i) :- list_inventory(State), !.
-do(State, NewState, interact(pillar, Index)) :- interact(State, pillar, Index, NewState).
-do(State, State, _) :-
-    write("illegal command"), nl.
-
-end_msg(quit) :- write("bye").
-end_msg(win) :- write("gz you won").
+do(State, NewState, interact(pillar, Index)) :- interact(State, pillar, Index, NewState), !.
+do(State, State, inspect(Object, Where)) :- inspect(State, Object, Where), !.
+do(State, State, _) :- write("illegal command"), nl.
 
 main_loop(State) :-
     get_assoc(end, State, Value),
