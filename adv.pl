@@ -101,34 +101,44 @@ goto(State, NewPosition, NewState) :-
 inventory(State, Inventory) :-
     get_assoc(inventory, State, Inventory).
 
-item_location(State, Items) :-
-    get_assoc(items, State, Items).
-
-item_in_room(State, Room, Item) :-
-    get_assoc(items, State, ItemsInRoom),
-    member(Room/Item, ItemsInRoom).
+objects_in_room(State, Room, Objects) :-
+    get_assoc(objects, State, RoomObjMapping),
+    get_assoc(Room, RoomObjMapping, Objects).
 
 take_item(State, Item, NewState) :-
+    % take object from room
     position(State, Room),
-    item_location(State, ItemLocations),
-    select(Room/Item, ItemLocations, NewItemLocations),
+    get_assoc(objects, State, RoomObjMapping),
+    get_assoc(Room, RoomObjMapping, Objects),
+    select(Item, Objects, NewObjects),
+    % update room
+    put_assoc(Room, RoomObjMapping, NewObjects, UpdatedRoomObjMapping),
+    put_assoc(objects, State, UpdatedRoomObjMapping, TmpState),
+    % update inventory
     inventory(State, Inventory),
     NewInventory = [Item | Inventory],
-    put_assoc(inventory, State, NewInventory, TmpState),
-    put_assoc(items, TmpState, NewItemLocations, NewState).
+    put_assoc(inventory, TmpState, NewInventory, NewState).
 
-% TODO room/item
 drop_item(State, Item, NewState) :-
+    % drop item in the room your in
+    position(State, Room),
+    get_assoc(objects, State, RoomObjMapping),
+    get_assoc(Room, RoomObjMapping, Objects),
+    NewObjects = [Item | Objects],
+    put_assoc(Room, RoomObjMapping, NewObjects, UpdatedRoomObjMapping),
+    put_assoc(objects, State, UpdatedRoomObjMapping, TmpState),
+    % remove item from inventory
     inventory(State, Inventory),
     select(Item, Inventory, NewInventory), % handle item does not exists case
-    put_assoc(inventory, State, NewInventory, NewState).
+    put_assoc(inventory, TmpState, NewInventory, NewState).
 
 drop_item(State, _, State).
 
 % constraints
 can_take(State, Item) :-
-    position(State, Position),
-    item_in_room(State, Position, Item).
+    position(State, Room),
+    objects_in_room(State, Room, Objects),
+    member(Item, Objects).
 
 can_take(_, _) :- write("This seems wired."), nl, fail.
 
@@ -145,6 +155,10 @@ list_inventory(State) :-
 take(State, Item, NewState) :-
     write("You put: "), write(Item), write(" into your bag"), nl,
     take_item(State, Item, NewState).
+
+drop(State, Item, NewState) :-
+    write("You drop "), write(Item), write(" on the floor"), nl,
+    drop_item(State, Item, NewState).
 
 r1_puzzle(State) :-
     inventory(State, Inventory),
@@ -256,6 +270,7 @@ do(State, State, look) :- look(State), !.
 do(State, NewState, goto(NewPosition)) :- goto(State, NewPosition, NewState), !.
 do(State, NewState, quit) :- quit(State, NewState), !.
 do(State, NewState, take(Item)) :- take(State, Item, NewState), !.
+do(State, NewState, drop(Item)) :- drop(State, Item, NewState), !.
 do(State, State, i) :- list_inventory(State), !.
 do(State, NewState, interact(pillar, Index)) :- interact(State, pillar, Index, NewState), !.
 do(State, State, inspect(Object, Where)) :- inspect(State, Object, Where), !.
@@ -274,9 +289,15 @@ main_loop(State) :-
     main_loop(NewState).
 
 init(State) :-
+    list_to_assoc([r0-[torch],
+                   r1-[],
+                   r2-[],
+                   r3-[],
+                   r4-[],
+                   r5-[]], Objects),
     list_to_assoc([position-r0,
                    inventory-[],
-                   items-[r0/torch],
+                   objects-Objects,
                    pillars-[[snake, bear, eagle],
                             [bear, eagle, snake],
                             [eagle, snake, bear]]], State).
@@ -286,3 +307,9 @@ start :-
     init(State),
     main_loop(State).
 
+% test state
+test(X) :-
+    list_to_assoc([r0-[]], Objects),
+    list_to_assoc([position-r0,
+                   inventory-[a],
+                   objects-Objects], X).
